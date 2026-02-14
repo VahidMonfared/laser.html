@@ -258,7 +258,8 @@
 
             // Calculate FPS
             const currentTime = Date.now();
-            const fps = Math.round(1000 / (currentTime - lastTime));
+            const deltaTime = currentTime - lastTime;
+            const fps = deltaTime > 0 ? Math.round(1000 / deltaTime) : 60;
             document.getElementById('fps').textContent = fps;
             lastTime = currentTime;
         }
