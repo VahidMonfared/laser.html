@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laser Effect</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            overflow: hidden;
+            background: #000;
+            font-family: 'Arial', sans-serif;
+        }
+
+        canvas {
+            display: block;
+            cursor: crosshair;
+        }
+
+        .controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #0ff;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #0ff;
+            z-index: 10;
+        }
+
+        .controls h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px #0ff;
+        }
+
+        .controls p {
+            font-size: 14px;
+            margin: 5px 0;
+        }
+
+        .control-group {
+            margin: 10px 0;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 12px;
+        }
+
+        input[type="color"],
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+        }
+
+        input[type="range"] {
+            height: 25px;
+        }
+
+        button {
+            background: #0ff;
+            border: none;
+            color: #000;
+            padding: 8px 16px;
+            margin: 5px 5px 0 0;
+            cursor: pointer;
+            border-radius: 4px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+
+        button:hover {
+            background: #fff;
+            box-shadow: 0 0 15px #0ff;
+        }
+
+        .info {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            color: #0ff;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 8px;
+            border: 2px solid #0ff;
+            font-size: 12px;
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="laserCanvas"></canvas>
+    
+    <div class="controls">
+        <h1>🔴 LASER BEAM</h1>
+        <p>Click to shoot lasers!</p>
+        
+        <div class="control-group">
+            <label>Laser Color:</label>
+            <input type="color" id="colorPicker" value="#00ffff">
+        </div>
+        
+        <div class="control-group">
+            <label>Laser Width: <span id="widthValue">3</span>px</label>
+            <input type="range" id="widthSlider" min="1" max="10" value="3">
+        </div>
+        
+        <div class="control-group">
+            <label>Laser Speed: <span id="speedValue">5</span></label>
+            <input type="range" id="speedSlider" min="1" max="10" value="5">
+        </div>
+        
+        <div>
+            <button id="clearBtn">Clear</button>
+            <button id="autoBtn">Auto Mode</button>
+        </div>
+    </div>
+
+    <div class="info">
+        <p>Lasers Fired: <span id="laserCount">0</span></p>
+        <p>FPS: <span id="fps">60</span></p>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('laserCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Set canvas size
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // Laser configuration
+        let laserColor = '#00ffff';
+        let laserWidth = 3;
+        let laserSpeed = 5;
+        let laserCount = 0;
+        let autoMode = false;
+
+        // Array to store active lasers
+        const lasers = [];
+
+        // Laser class
+        class Laser {
+            constructor(x, y, targetX, targetY) {
+                this.x = x;
+                this.y = y;
+                this.targetX = targetX;
+                this.targetY = targetY;
+                
+                // Calculate angle and velocity
+                const angle = Math.atan2(targetY - y, targetX - x);
+                this.vx = Math.cos(angle) * laserSpeed;
+                this.vy = Math.sin(angle) * laserSpeed;
+                
+                this.color = laserColor;
+                this.width = laserWidth;
+                this.life = 100;
+                this.trail = [];
+                this.maxTrailLength = 20;
+            }
+
+            update() {
+                // Store position for trail
+                this.trail.push({ x: this.x, y: this.y });
+                if (this.trail.length > this.maxTrailLength) {
+                    this.trail.shift();
+                }
+
+                // Update position
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life--;
+            }
+
+            draw() {
+                // Draw trail
+                for (let i = 0; i < this.trail.length; i++) {
+                    const alpha = i / this.trail.length;
+                    ctx.strokeStyle = this.color + Math.floor(alpha * 255).toString(16).padStart(2, '0');
+                    ctx.lineWidth = this.width * alpha;
+                    ctx.lineCap = 'round';
+                    
+                    if (i > 0) {
+                        ctx.beginPath();
+                        ctx.moveTo(this.trail[i - 1].x, this.trail[i - 1].y);
+                        ctx.lineTo(this.trail[i].x, this.trail[i].y);
+                        ctx.stroke();
+                    }
+                }
+
+                // Draw laser beam
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = this.width;
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = this.color;
+                ctx.lineCap = 'round';
+                
+                if (this.trail.length > 0) {
+                    const lastPos = this.trail[this.trail.length - 1];
+                    ctx.beginPath();
+                    ctx.moveTo(lastPos.x, lastPos.y);
+                    ctx.lineTo(this.x, this.y);
+                    ctx.stroke();
+                }
+
+                // Draw glow effect at tip
+                const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.width * 3);
+                gradient.addColorStop(0, this.color);
+                gradient.addColorStop(1, 'transparent');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(this.x - this.width * 3, this.y - this.width * 3, this.width * 6, this.width * 6);
+
+                ctx.shadowBlur = 0;
+            }
+
+            isDead() {
+                return this.life <= 0 || 
+                       this.x < -50 || this.x > canvas.width + 50 || 
+                       this.y < -50 || this.y > canvas.height + 50;
+            }
+        }
+
+        // Animation loop
+        let lastTime = Date.now();
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Fade out effect instead of clearing
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Update and draw lasers
+            for (let i = lasers.length - 1; i >= 0; i--) {
+                lasers[i].update();
+                lasers[i].draw();
+
+                if (lasers[i].isDead()) {
+                    lasers.splice(i, 1);
+                }
+            }
+
+            // Auto mode - shoot random lasers
+            if (autoMode && Math.random() < 0.1) {
+                const startX = Math.random() * canvas.width;
+                const startY = Math.random() * canvas.height;
+                const endX = Math.random() * canvas.width;
+                const endY = Math.random() * canvas.height;
+                shootLaser(startX, startY, endX, endY);
+            }
+
+            // Calculate FPS
+            const currentTime = Date.now();
+            const deltaTime = currentTime - lastTime;
+            const fps = deltaTime > 0 ? Math.round(1000 / deltaTime) : 60;
+            document.getElementById('fps').textContent = fps;
+            lastTime = currentTime;
+        }
+
+        // Shoot laser function
+        function shootLaser(startX, startY, endX, endY) {
+            lasers.push(new Laser(startX, startY, endX, endY));
+            laserCount++;
+            document.getElementById('laserCount').textContent = laserCount;
+        }
+
+        // Mouse click event
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const targetX = e.clientX - rect.left;
+            const targetY = e.clientY - rect.top;
+            
+            shootLaser(centerX, centerY, targetX, targetY);
+        });
+
+        // Color picker
+        document.getElementById('colorPicker').addEventListener('input', (e) => {
+            laserColor = e.target.value;
+        });
+
+        // Width slider
+        document.getElementById('widthSlider').addEventListener('input', (e) => {
+            laserWidth = parseInt(e.target.value);
+            document.getElementById('widthValue').textContent = laserWidth;
+        });
+
+        // Speed slider
+        document.getElementById('speedSlider').addEventListener('input', (e) => {
+            laserSpeed = parseInt(e.target.value);
+            document.getElementById('speedValue').textContent = laserSpeed;
+        });
+
+        // Clear button
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            lasers.length = 0;
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            laserCount = 0;
+            document.getElementById('laserCount').textContent = laserCount;
+        });
+
+        // Auto mode button
+        const autoBtn = document.getElementById('autoBtn');
+        autoBtn.addEventListener('click', () => {
+            autoMode = !autoMode;
+            autoBtn.textContent = autoMode ? 'Stop Auto' : 'Auto Mode';
+            autoBtn.style.background = autoMode ? '#ff0000' : '#00ffff';
+        });
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+
+        // Start animation
+        animate();
+    </script>
+</body>
+</html>
